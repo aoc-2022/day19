@@ -37,6 +37,23 @@ type Cutoffs(bluePrint: BluePrint, maxMaterials: Resources, latestBeforeLeft:Map
         | Clay -> couldUseMoreClay
         | Obsidian -> couldUseMoreObsidian
         | Geode -> true 
+    
+    member this.ShouldBuildSomething (production:Production) (resources:Resources) (robots:Robot list) : bool =
+        let robots = robots |> List.map (fun robot -> (robot.Type,robot)) |> Map.ofList
+        let canOre = robots.ContainsKey Ore
+        let canClay = robots.ContainsKey Clay
+        let canObs = robots.ContainsKey Obsidian
+        let canBuildAll = canOre && canClay && canObs
+        let oneMissing = production.Ore = 0 || production.Clay = 0 || production.Obsidian = 0
+        let oreOverflow = resources.Ore > 2*maxMaterials.Ore
+        let clayOverflow = resources.Clay > 2*maxMaterials.Clay
+        if canBuildAll && oneMissing then true
+        elif production.Clay = 0 && canClay && canOre then true
+        elif oreOverflow && canClay then true
+        elif oreOverflow && clayOverflow && canObs then true 
+        else false 
+        
+        
         
     static member init(bluePrint: BluePrint) =
         let costs = bluePrint.Robots |> List.map (fun robot -> robot.Costs.Value)
@@ -56,4 +73,7 @@ type Cutoffs(bluePrint: BluePrint, maxMaterials: Resources, latestBeforeLeft:Map
 
         printfn $"obsidianTurns: {obsidianTurns} clayTurns={clayTurns}" 
         Cutoffs(bluePrint, maxMaterials, latestBeforeLeft)
+    
+    
+        
         

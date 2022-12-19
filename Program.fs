@@ -159,7 +159,14 @@ let rec step
                     tryBuilds cache robots
 
             let cache: Cache = tryBuilds cache canBuild
-            let noBuild = step time state cache production Production.empty current cutoffs
+            let noBuild =
+                let shouldBuild = cutoffs.ShouldBuildSomething production current canBuild
+                if shouldBuild then
+                    // printfn $"Should build: {production} {canBuild}"
+                    cache 
+                else
+                    // if canBuild.Length > 0 then printfn $"No reason to build: {production} {canBuild}"
+                    step time state cache production Production.empty current cutoffs
             noBuild
 
 let solveForBluePrint (minutes: int) (bluePrint: BluePrint) : BluePrint * Cache =
