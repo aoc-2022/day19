@@ -20,7 +20,23 @@ type Cutoffs(bluePrint: BluePrint, maxMaterials: Resources, latestBeforeLeft:Map
     member this.StillTimeForRobot (time:Time) (production:Production) (robot:Robot) =
         if production.Clay = 0 && time.Left < latestBeforeLeft[Clay] then false
         elif production.Obsidian = 0 && time.Left < latestBeforeLeft[Obsidian] then false
-        else true 
+        else true
+    member this.TooLateForRobot (time:Time) (production:Production) (robot:Robot) =
+        this.StillTimeForRobot time production robot |> not
+        
+    member this.StillNeedFor (time:Time) (production:Production) (resources:Resources) (robot:Robot) =
+        let oreNeed = [bluePrint.Clay.Costs.Ore;bluePrint.Obsidian.Costs.Ore;bluePrint.Clay.Costs.Ore] |> List.max
+        let oreAccu = resources.Ore / time.Left - 1
+        let clayAccu = resources.Clay / time.Left - 1 
+        let obsAccu = resources.Obsidian / time.Left - 1
+        let couldUseMoreOre =  production.Ore + oreAccu < oreNeed 
+        let couldUseMoreClay = production.Clay + clayAccu < bluePrint.Obsidian.Costs.Clay 
+        let couldUseMoreObsidian = production.Obsidian + obsAccu < bluePrint.Geode.Costs.Obsidian
+        match robot.Type with 
+        | Ore -> couldUseMoreOre
+        | Clay -> couldUseMoreClay
+        | Obsidian -> couldUseMoreObsidian
+        | Geode -> true 
         
     static member init(bluePrint: BluePrint) =
         let costs = bluePrint.Robots |> List.map (fun robot -> robot.Costs.Value)

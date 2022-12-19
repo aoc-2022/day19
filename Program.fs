@@ -1,5 +1,6 @@
 ﻿open System.IO
 open System
+open day19
 open day19.BaseTypes
 open day19.Robot
 open day19.Cache
@@ -13,7 +14,7 @@ let (|Int|_|) (s: string) =
 let addLists (a: int list) (b: int list) =
     List.zip a b |> List.map (fun (a, b) -> a + b)
 
-let file = File.ReadLines "/tmp/aoc/input.t" |> Seq.toList
+let file = File.ReadLines "/tmp/aoc/input" |> Seq.toList
 
 let parse (s: string) : BluePrint =
     let s = s.Split [| ' '; ':' |] |> Array.toList
@@ -34,14 +35,18 @@ let input: BluePrint list = file |> List.map parse
 
 // input |> List.map (printfn "%A")
 
-type State(robots: Robot list, geodeRobot: Robot) =
+type State(robots: Robot list, geodeRobot: Robot, bluePrint: BluePrint) =
     member this.Robots = robots
     member this.GeodeRobot = geodeRobot
+    member this.BluePrint = bluePrint
 
-    static member init(robots: BluePrint) =
-        let geode = robots.Robots |> List.filter (fun robot -> robot.Type = Geode)
-        let robots = robots.Robots |> List.filter (fun robot -> robot.Type = Geode |> not)
-        State(robots, geode[0])
+    static member init(bluePrint: BluePrint) =
+        let geode = bluePrint.Robots |> List.filter (fun robot -> robot.Type = Geode)
+
+        let robots =
+            bluePrint.Robots |> List.filter (fun robot -> robot.Type = Geode |> not)
+
+        State(robots, geode[0], bluePrint)
 
 let produce (current: Resources) (production: Production) : Resources =
     addLists current.Value production.Value |> Resources
@@ -70,6 +75,32 @@ let canBuildEnough (time: int) (best: int) (curr: int) (geoprod: int) (buildTime
     let enough = potential > best
     enough
 
+let anyAbortions
+    (time: Time)
+    (state: State)
+    (cache: Cache)
+    (production: Production)
+    (resources: Resources)
+    (cutoffs: Cutoffs)
+    : bool * string =
+    let geoPerMin = estimatedBuildTime time.Left production state.GeodeRobot
+
+    let canCatchUp =
+        canBuildEnough time.Left cache.Best resources.Value[3] production.Value[3] geoPerMin
+
+    if not canCatchUp then
+        true, "Can't catch up"
+    elif
+        state.Robots
+        |> Seq.map (cutoffs.TooLateForRobot time production)
+        |> Seq.filter id
+        |> Seq.length > 0
+    then
+        // printfn "It's too late for apologies, it's too late..."
+        true, "too late for robots"
+    else
+        false, "ok"
+
 let rec step
     (time: Time)
     (state: State)
@@ -82,45 +113,54 @@ let rec step
     let time = time.Tick()
     let current = produce current production
     let production = addFresh production fresh
-    let geoPerMin = estimatedBuildTime time.Left production state.GeodeRobot
 
-    if time.Left < -3 then
-        printfn $"{time.Indent} {time.Left}: {cache} {production}  {current} {state.GeodeRobot} geoPerTime:{geoPerMin}"
+    if time.Left < -2 then
+        printfn $"{time.Indent} {time.Left}: {cache} {production}  {current} {state.BluePrint}"
 
     let cache, shouldContinue = cache.Register time current production
 
-    let canCatchUp =
-        canBuildEnough time.Left cache.Best current.Value[3] production.Value[3] geoPerMin
-
-    if time.Left < 1 || (not shouldContinue || (not canCatchUp)) then
+    if time.Left < 1 || (not shouldContinue) then
         cache
-    else if state.GeodeRobot.CanBuild current then // always build geode
-        let fresh, current = buildRobot state.GeodeRobot current
-        step time state cache production fresh current cutoffs
     else
-        let canBuild = state.Robots |> List.filter (fun robot -> robot.CanBuild current)
-        let cb1 = canBuild.Length
-        let canBuild = canBuild |> List.filter (cutoffs.UsefulToBuild time)
-        let cb2 = canBuild.Length
-        let canBuild = canBuild |> List.filter (cutoffs.NeedMaterial time current)
-        let cb3 = canBuild.Length
-        let canBuild = canBuild |> List.filter (cutoffs.StillTimeForRobot time production)
-        let cb4 = canBuild.Length
-        // if cb1 <> cb2 then printfn $"*1*Reduced robots from {cb1} to {cb2}"
-        // if cb2 <> cb3 then printfn $"*2*Reduced robots from {cb2} to {cb3}"
-        // if cb3 <> cb4 then printfn $"*3*Reduced robots from {cb2} to {cb3} [stillTimeForRobot]"
+        // let (abort, reason) = anyAbortions time state cache production current cutoffs
 
-        let rec tryBuilds (cache: Cache) (robots: Robot list) : Cache =
-            match robots with
-            | [] -> cache
-            | robot :: robots ->
-                let fresh, current = buildRobot robot current
-                let cache = step time state cache production fresh current cutoffs
-                tryBuilds cache robots
+        // if abort then
+            // printfn $"Aborting (anyAbortions): reason={reason}"
+            // cache
+        if time.Left < 2 && (time.Left * production.Geode) + current.Geode <= cache.Best then
+            // printfn $"Aborting: Cache best= time.Left={time.Left} prod g={production.Geode} best={cache.Best}"
+            // printfn "Aborting: < 3 && 2xprod<=best"
+            cache
+        elif state.GeodeRobot.CanBuild current then // always build geode
+            let fresh, current = buildRobot state.GeodeRobot current
+            step time state cache production fresh current cutoffs
+        else
+            let canBuild = state.Robots |> List.filter (fun robot -> robot.CanBuild current)
+            // let cb1 = canBuild.Length
+            let canBuild = canBuild |> List.filter (cutoffs.UsefulToBuild time)
+            let cb2 = canBuild.Length
+            let canBuild = canBuild |> List.filter (cutoffs.NeedMaterial time current)
+            let cb3 = canBuild.Length
+            let canBuild = canBuild |> List.filter (cutoffs.StillTimeForRobot time production)
+            let cb4 = canBuild.Length
+            let canBuild = canBuild |> List.filter (cutoffs.StillNeedFor time production current)
+            let cb5 = canBuild.Length
+            // if cb1 <> cb2 then printfn $"*1*Reduced robots from {cb1} to {cb2}"
+            // if cb2 <> cb3 then printfn $"*2*Reduced robots from {cb2} to {cb3}"
+            // if cb3 <> cb4 then printfn $"*3*Reduced robots from {cb2} to {cb3} [stillTimeForRobot]"
+            // if cb4 <> cb5 then printfn $"*3*Reduced robots from {cb4} to {cb5} [stillTimeForRobot] {time}"
 
-        let cache: Cache = tryBuilds cache canBuild
-        let noBuild = step time state cache production Production.empty current cutoffs
-        noBuild
+            let rec tryBuilds (cache: Cache) (robots: Robot list) : Cache =
+                match robots with
+                | [] -> cache
+                | robot :: robots ->
+                    let fresh, current = buildRobot robot current
+                    let cache = step time state cache production fresh current cutoffs
+                    tryBuilds cache robots
+
+            let cache: Cache = tryBuilds cache canBuild
+            let noBuild = step time state cache production Production.empty current cutoffs
+            noBuild
 
 let solveForBluePrint (minutes: int) (bluePrint: BluePrint) : BluePrint * Cache =
     printfn $"Solving for {bluePrint}"
@@ -140,13 +180,15 @@ let solveForBluePrint (minutes: int) (bluePrint: BluePrint) : BluePrint * Cache 
 
 let result1 =
     input
-    |> List.map (solveForBluePrint 32)
+    |> List.map (solveForBluePrint 24)
     |> List.map (fun (bp, cache) -> bp.Id * cache.Best)
     |> List.sum
 
+// let res = solveForBluePrint 24 input[2]
+
 printfn $"result: {result1}"
 
-let input2 = if input.Length > 3 then input |> List.take 3 else input 
+let input2 = if input.Length > 3 then input |> List.take 3 else input
 
 // let result2 = input2 |> List.map (solveForBluePrint 32) |> List.map (fun (bp,cache) -> bp.Id * cache.Best) |> List.sum
 // printfn $"result: {result2}"
