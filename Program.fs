@@ -13,9 +13,9 @@ let (|Int|_|) (s: string) =
 let addLists (a: int list) (b: int list) =
     List.zip a b |> List.map (fun (a, b) -> a + b)
 
-let file = File.ReadLines "/tmp/aoc/input" |> Seq.toList
+let file = File.ReadLines "/tmp/aoc/input.t" |> Seq.toList
 
-let parse (s: string) : BluePrint = 
+let parse (s: string) : BluePrint =
     let s = s.Split [| ' '; ':' |] |> Array.toList
     let blueprint = s[1] |> int
     let ore = s[7] |> int
@@ -28,9 +28,9 @@ let parse (s: string) : BluePrint =
     let geodeOre = s[28] |> int
     let geodeObs = s[31] |> int
     let geodeRobot = Robot(Geode, [ geodeOre; 0; geodeObs; 0 ] |> Resources)
-    BluePrint(blueprint, [ oreRobot; clayRobot; obsRobot; geodeRobot ] |> List.rev ) 
+    BluePrint(blueprint, [ oreRobot; clayRobot; obsRobot; geodeRobot ] |> List.rev)
 
-let input = file |> List.map parse
+let input: BluePrint list = file |> List.map parse
 
 // input |> List.map (printfn "%A")
 
@@ -79,14 +79,13 @@ let rec step
     (current: Resources)
     (cutoffs: Cutoffs)
     : Cache =
-    let time = time.Tick () 
+    let time = time.Tick()
     let current = produce current production
     let production = addFresh production fresh
     let geoPerMin = estimatedBuildTime time.Left production state.GeodeRobot
 
     if time.Left < -3 then
-        printfn
-             $"{time.Indent} {time.Left}: {cache} {production}  {current} {state.GeodeRobot} geoPerTime:{geoPerMin}"
+        printfn $"{time.Indent} {time.Left}: {cache} {production}  {current} {state.GeodeRobot} geoPerTime:{geoPerMin}"
 
     let cache, shouldContinue = cache.Register time current production
 
@@ -97,7 +96,7 @@ let rec step
         cache
     else if state.GeodeRobot.CanBuild current then // always build geode
         let fresh, current = buildRobot state.GeodeRobot current
-        step time state cache production fresh current cutoffs 
+        step time state cache production fresh current cutoffs
     else
         let canBuild = state.Robots |> List.filter (fun robot -> robot.CanBuild current)
         let cb1 = canBuild.Length
@@ -105,34 +104,53 @@ let rec step
         let cb2 = canBuild.Length
         let canBuild = canBuild |> List.filter (cutoffs.NeedMaterial time current)
         let cb3 = canBuild.Length
+        let canBuild = canBuild |> List.filter (cutoffs.StillTimeForRobot time production)
+        let cb4 = canBuild.Length
         // if cb1 <> cb2 then printfn $"*1*Reduced robots from {cb1} to {cb2}"
         // if cb2 <> cb3 then printfn $"*2*Reduced robots from {cb2} to {cb3}"
+        // if cb3 <> cb4 then printfn $"*3*Reduced robots from {cb2} to {cb3} [stillTimeForRobot]"
 
         let rec tryBuilds (cache: Cache) (robots: Robot list) : Cache =
             match robots with
             | [] -> cache
             | robot :: robots ->
                 let fresh, current = buildRobot robot current
-                let cache = step time state cache production fresh current cutoffs 
+                let cache = step time state cache production fresh current cutoffs
                 tryBuilds cache robots
+
         let cache: Cache = tryBuilds cache canBuild
-        let noBuild = step time state cache production Production.empty current cutoffs 
+        let noBuild = step time state cache production Production.empty current cutoffs
         noBuild
 
-let solveForBluePrint (bluePrint: BluePrint) : BluePrint*Cache=
+let solveForBluePrint (minutes: int) (bluePrint: BluePrint) : BluePrint * Cache =
     printfn $"Solving for {bluePrint}"
-    let cache = step
-                    (Time.init 24)
-                    (State.init bluePrint)
-                    Cache.empty
-                    (Production [ 1; 0; 0; 0 ])
-                    (Production [ 0; 0; 0; 0 ])
-                    (Resources [ 0; 0; 0; 0 ])
-                    (Cutoffs.init bluePrint)
-    bluePrint,cache 
-let result = input |> List.map solveForBluePrint |> List.map (fun (bp,cache) -> bp.Id * cache.Best) |> List.sum 
+    let time = Time.init minutes
 
-printfn $"result: {result}"
+    let cache =
+        step
+            (Time.init minutes)
+            (State.init bluePrint)
+            Cache.empty
+            (Production [ 1; 0; 0; 0 ])
+            (Production [ 0; 0; 0; 0 ])
+            (Resources [ 0; 0; 0; 0 ])
+            (Cutoffs.init bluePrint)
+
+    bluePrint, cache
+
+let result1 =
+    input
+    |> List.map (solveForBluePrint 32)
+    |> List.map (fun (bp, cache) -> bp.Id * cache.Best)
+    |> List.sum
+
+printfn $"result: {result1}"
+
+let input2 = if input.Length > 3 then input |> List.take 3 else input 
+
+// let result2 = input2 |> List.map (solveForBluePrint 32) |> List.map (fun (bp,cache) -> bp.Id * cache.Best) |> List.sum
+// printfn $"result: {result2}"
+
 // ORE=4  0 0
 //CLAY=2  0 0
 // OBS=3 14 0

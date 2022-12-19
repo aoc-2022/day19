@@ -10,6 +10,10 @@ type Resource =
 
 type Production(production: int list) =
     member this.Value = production
+    member this.Geode = production[3]
+    member this.Obsidian = production[2]
+    member this.Clay = production[1]
+    member this.Ore = production[0]
     override this.ToString() = $"P([{s4 production}])"
     static member empty = Production [ 0; 0; 0; 0 ]
     static member oneOre = Production [ 1; 0; 0; 0 ]
