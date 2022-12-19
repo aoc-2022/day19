@@ -7,21 +7,21 @@ type Cache(best: int, bestCurrent: Map<int, Resources>, bestProduction: Map<int,
     member this.BestCurrent = bestCurrent
     member this.BestProduction = bestProduction
 
-    member this.Register (time: int) (current: Resources) (production: Production) : Cache * bool =
+    member this.Register (time: Time) (current: Resources) (production: Production) : Cache * bool =
         let best =
             if max best current.Geode > best then
                 printfn $"BETTER: {current.Geode}"
 
             max best current.Geode
 
-        if bestCurrent.ContainsKey time |> not then
+        if bestCurrent.ContainsKey time.Left |> not then
             // printfn $"Register New Entry: C={s4 current} P={s4 production}"
-            let bestCurrent = bestCurrent.Add(time, current)
-            let bestProduction = bestProduction.Add(time, production)
+            let bestCurrent = bestCurrent.Add(time.Left, current)
+            let bestProduction = bestProduction.Add(time.Left, production)
             Cache(best, bestCurrent, bestProduction), true
         else
-            let currZipped = List.zip current.Value bestCurrent[time].Value
-            let prodZipped = List.zip production.Value bestProduction[time].Value
+            let currZipped = List.zip current.Value bestCurrent[time.Left].Value
+            let prodZipped = List.zip production.Value bestProduction[time.Left].Value
 
             let currentBetter: bool =
                 currZipped |> List.tryFind (fun (c, b) -> (c < b)) |> Option.isNone
@@ -36,8 +36,8 @@ type Cache(best: int, bestCurrent: Map<int, Resources>, bestProduction: Map<int,
                 prodZipped |> List.tryFind (fun (c, b) -> (c > b)) |> Option.isNone
 
             if currentBetter && prodBetter then
-                let bestCurrent = bestCurrent.Add(time, current)
-                let bestProduction = bestProduction.Add(time, production)
+                let bestCurrent = bestCurrent.Add(time.Left, current)
+                let bestProduction = bestProduction.Add(time.Left, production)
                 Cache(best, bestCurrent, bestProduction), true
             else
                 let shouldContinue = (not currentWorse) || (not prodWorse)
